@@ -10,6 +10,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from quant_harbor.dashboard.tv_chart import render_lightweight_chart
+from quant_harbor.regime import RegimeConfig, compute_regime
 from quant_harbor.dashboard.utils import (
     discover_runs,
     runs_to_dataframe,
@@ -329,6 +330,38 @@ def page_details_v2():
 
                     # Lightweight-charts expects markers sorted by time.
                     m = sorted(m, key=lambda x: (x.get("time", 0), x.get("text", "")))
+
+                # Regime overlay on TEST bars (15m): show background blocks by regime.
+                try:
+                    reg = compute_regime(bars, RegimeConfig())
+                    # compute contiguous blocks and render as semi-transparent spans
+                    blocks = []
+                    cur = None
+                    for ts, lab in reg["regime"].items():
+                        if cur is None:
+                            cur = [ts, ts, lab]
+                        elif lab == cur[2]:
+                            cur[1] = ts
+                        else:
+                            blocks.append(tuple(cur))
+                            cur = [ts, ts, lab]
+                    if cur is not None:
+                        blocks.append(tuple(cur))
+
+                    colors = {"Trend": "rgba(38,166,154,0.10)", "Range": "rgba(239,83,80,0.10)", "Neutral": "rgba(201,209,217,0.06)"}
+                    # Lightweight-charts doesn't support background regions natively.
+                    # As MVP: show a small regime timeline below the chart using Plotly.
+                    st.caption("Regime (15m) on TEST segment: Trend/Range/Neutral (computed from ER+ADX+Bandwidth; EMA-smoothed).")
+                    reg_plot = reg[["trend_score"]].copy()
+                    reg_plot.index = reg_plot.index.tz_convert("America/New_York").tz_localize(None)
+                    figr = go.Figure()
+                    figr.add_trace(go.Scatter(x=reg_plot.index, y=reg_plot["trend_score"], name="trend_score"))
+                    figr.update_layout(height=180, margin=dict(l=10, r=10, t=20, b=10))
+                    figr.add_hline(y=0.6, line_dash="dot")
+                    figr.add_hline(y=0.4, line_dash="dot")
+                    st.plotly_chart(figr, use_container_width=True)
+                except Exception:
+                    pass
 
                 html = render_lightweight_chart(candles=c, markers=m, height=560)
                 components.html(html, height=580, scrolling=False)
