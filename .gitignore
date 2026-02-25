@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+
+# Virtualenv
+.venv/
+
+# OS
+.DS_Store
+
+# Local data / outputs (DO NOT COMMIT)
+data/snapshots/
+results/
+results_archive_*/
+
+# Logs
+*.log
+
+# Secrets
+.env
+*.env
+*.pem
+*.key
+*token*
+*secret*
+*credentials*
