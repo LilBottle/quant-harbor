@@ -179,8 +179,10 @@ def scorecard_v1(
 
     # Map PF: 1.0 -> 0.5, 1.3 -> 1.0
     pf01 = _clip01((pf - 0.7) / (1.3 - 0.7))
-    # Expectancy: 0 -> 0.5, 0.2 -> 1.0 (rough)
-    exp01 = _clip01((exp + 0.2) / 0.4)
+    # Expectancy (normalized, pct-of-start). Heuristic mapping:
+    # -0.05% -> 0, 0% -> 0.5, +0.05% -> 1.0
+    # (This keeps a reasonable dynamic range for typical per-trade expectancy values.)
+    exp01 = _clip01((exp + 0.05) / 0.10)
     # Sharpe: 0 -> 0.5, 1.0 -> 1.0
     sharpe01 = _clip01((sharpe + 1.0) / 2.0)
     # Net return: -5% -> 0, +5% -> 1

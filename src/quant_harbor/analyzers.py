@@ -57,19 +57,26 @@ class TradeListAnalyzer(bt.Analyzer):
         entry_size = float(cached.get("size", 0.0))
         entry_price = float(cached.get("price", trade.price))
 
-        # Direction from entry size sign; fall back to LONG if unknown.
-        direction = "LONG" if entry_size >= 0 else "SHORT"
+        # Direction from entry size sign.
+        # If entry_size==0 (cache miss / unexpected trade), mark UNKNOWN to avoid silent mislabeling.
+        if entry_size > 0:
+            direction = "LONG"
+        elif entry_size < 0:
+            direction = "SHORT"
+        else:
+            direction = "UNKNOWN"
 
         # Compute exit price from PnL and entry size if possible.
         exit_price = float(entry_price)
         if entry_size != 0:
             exit_price = float(entry_price + (float(trade.pnl) / entry_size))
 
+        # If direction unknown, we still record for audit, but set size=0.
         rec = TradeRecord(
             entry_dt=entry_dt,
             exit_dt=exit_dt,
             direction=direction,
-            size=float(abs(entry_size)) if entry_size != 0 else float(abs(trade.size)),
+            size=float(abs(entry_size)) if entry_size != 0 else 0.0,
             entry_price=float(entry_price),
             exit_price=float(exit_price),
             pnl=float(trade.pnl),
@@ -124,7 +131,7 @@ class EquityCurveAnalyzer(bt.Analyzer):
                 'equity_close': close_eq,
                 'equity_intrabar_min': float(min(close_eq, intrabar_eq)),
                 'cash': cash,
-                'pos_size': float(pos.size),
+                'pos_size_total': float(sum(abs(self.strategy.getposition(dd).size) for dd in self.strategy.datas)),
                 'close': float(self.strategy.data.close[0]),
             }
         )

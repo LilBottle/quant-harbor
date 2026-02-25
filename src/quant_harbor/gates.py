@@ -67,18 +67,25 @@ def apply_gates(summary: Dict[str, Any], cfg: GateConfig) -> Dict[str, Any]:
         ok = False
         reasons.append("missing_trades")
     else:
-        ann_trades = None
+        # Prefer precomputed annualized trades from metrics if present.
+        ann_trades = summary.get("trades_annualized")
         try:
-            t = int(trades)
-            if dt_min is not None and dt_max is not None:
-                t0 = pd.to_datetime(dt_min, utc=True)
-                t1 = pd.to_datetime(dt_max, utc=True)
-                days = max((t1 - t0).total_seconds() / 86400.0, 1.0)
-                ann_trades = t * (365.25 / days)
-            else:
-                ann_trades = float(t)
+            ann_trades = float(ann_trades) if ann_trades is not None else None
         except Exception:
             ann_trades = None
+
+        if ann_trades is None:
+            try:
+                t = int(trades)
+                if dt_min is not None and dt_max is not None:
+                    t0 = pd.to_datetime(dt_min, utc=True)
+                    t1 = pd.to_datetime(dt_max, utc=True)
+                    days = max((t1 - t0).total_seconds() / 86400.0, 1.0)
+                    ann_trades = t * (365.25 / days)
+                else:
+                    ann_trades = float(t)
+            except Exception:
+                ann_trades = None
 
         if ann_trades is None or float(ann_trades) < cfg.min_trades_annualized:
             ok = False
