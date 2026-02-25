@@ -82,10 +82,14 @@
 - Symbol：QQQ
 - Timeframe：15m
 - Session：RTH（09:30–16:00 ET）
-- Overnight：允许持仓跨日（是否强制日内平仓由策略参数/配置决定，不作为全局硬要求）
+- Overnight：允许持仓跨日（不做 EOD 强平；退出由策略信号/订单触发）
 - 初始资金：2000（可配置）
 - 成本：滑点 5 bps/side（建议后续做敏感性：10bps/side、20bps/side）
 - 手续费：先设 0（保留接口）
+
+撮合/订单口径（必须明确，避免“隐性乐观”）：
+- SL/TP 推荐用 **显式订单**表达（Stop / Limit，或 bracket）并由 bar 的 high/low 触发（bar-based 近似）。
+- 直接用 `if close <= stop: close()` 属于弱口径，容易产生乐观偏差（忽略 intrabar 触发/next-open 成交语义）。
 
 ### 2.2 单次回测输入/输出接口（必须统一）
 
@@ -111,9 +115,13 @@ results/<run_id>/
   - strategy_params
   - start_value / end_value
   - net_pnl / net_return_pct
-  - max_drawdown_close_pct / max_drawdown_intrabar_pct
+  - max_drawdown_close_pct
+  - max_drawdown_intrabar_pct（近似；单腿/多腿均为近似 mark-to-(low/high) 的 worst-case 合成；不等同逐笔/逐分钟真实最差路径）
+  - max_drawdown_intrabar_pct_approx（同上；更明确的字段名，建议后续以此为主）
   - total_trades / win_rate_pct
-  - profit_factor / expectancy / sharpe
+  - profit_factor / sharpe
+  - expectancy（美元）
+  - expectancy_pct_of_start（推荐：把 expectancy 归一化到起始资金百分比，避免 scorecard 被资金规模主导）
   - data_dt_min_utc / data_dt_max_utc
   - slippage_bps_side / commission_pct
   - slippage_sensitivity（可选但推荐；例如 bps=10/20 下净收益/回撤/Sharpe 的退化）

@@ -125,6 +125,11 @@ def run_backtest_df(
         equity_df = pd.DataFrame(equity_rows)
 
         tmetrics = compute_trade_metrics(trades)
+        # Normalize expectancy to percent-of-start (scale-invariant for scorecard)
+        if start_value and tmetrics.get('expectancy') is not None:
+            tmetrics['expectancy_pct_of_start'] = float(tmetrics['expectancy']) / float(start_value) * 100.0
+        else:
+            tmetrics['expectancy_pct_of_start'] = None
 
         dd_intrabar = None
         if not equity_df.empty and "equity_intrabar_min" in equity_df.columns:
@@ -142,7 +147,9 @@ def run_backtest_df(
             "net_return_pct": (end_value / start_value - 1.0) * 100.0 if start_value else None,
             "max_drawdown_close_pct": dd_close.get("max", {}).get("drawdown", None),
             "max_drawdown_close_len": dd_close.get("max", {}).get("len", None),
+            # keep legacy name but also expose explicit approx label
             "max_drawdown_intrabar_pct": dd_intrabar,
+            "max_drawdown_intrabar_pct_approx": dd_intrabar,
             "sharpe": sharpe.get("sharperatio", None),
             "slippage_bps_side": float(slippage_bps_side),
             "commission_pct": cfg.commission_pct,
@@ -153,6 +160,46 @@ def run_backtest_df(
             "data_dt_max_utc": data_dt_max,
             **tmetrics,
         }
+
+        # Slippage sanity-check stats (best-effort): compare fill prices to bar close at the same timestamp.
+        out["slippage_sanity"] = None
+        try:
+            if len(dfs_utc) >= 1 and len(trades) > 0:
+                df0 = dfs_utc[0]
+                idx = pd.DatetimeIndex(df0.index)
+
+                def _snap_price(ts_list, col):
+                    ts = pd.to_datetime(ts_list, utc=True, errors="coerce")
+                    ii = idx.get_indexer(ts, method="nearest", tolerance=pd.Timedelta(minutes=60))
+                    outp = []
+                    for j in ii:
+                        outp.append(float(df0.iloc[j][col]) if j != -1 else None)
+                    return outp
+
+                entry_close = _snap_price([t["entry_dt"] for t in trades], "close")
+                exit_close = _snap_price([t["exit_dt"] for t in trades], "close")
+
+                entry_fill = [float(t["entry_price"]) for t in trades]
+                exit_fill = [float(t["exit_price"]) for t in trades]
+
+                def _bps(fill, ref):
+                    if ref is None or ref == 0:
+                        return None
+                    return (fill - ref) / ref * 10000.0
+
+                e_bps = [_bps(f, r) for f, r in zip(entry_fill, entry_close)]
+                x_bps = [_bps(f, r) for f, r in zip(exit_fill, exit_close)]
+
+                def _mean(xs):
+                    xs2 = [x for x in xs if x is not None]
+                    return float(sum(xs2) / len(xs2)) if xs2 else None
+
+                out["slippage_sanity"] = {
+                    "entry_vs_close_bps_mean": _mean(e_bps),
+                    "exit_vs_close_bps_mean": _mean(x_bps),
+                }
+        except Exception:
+            out["slippage_sanity"] = None
 
         return out, trades_df, equity_df
 

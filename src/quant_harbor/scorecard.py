@@ -157,7 +157,10 @@ def scorecard_v1(
 
     s0 = val_summary or test_summary or {}
     pf = _safe_float(s0.get("profit_factor"))
-    exp = _safe_float(s0.get("expectancy"))
+    # Prefer normalized expectancy if available
+    exp = _safe_float(s0.get("expectancy_pct_of_start"))
+    if exp is None:
+        exp = _safe_float(s0.get("expectancy"))
     sharpe = _safe_float(s0.get("sharpe"))
     netr = _safe_float(s0.get("net_return_pct"))
 
