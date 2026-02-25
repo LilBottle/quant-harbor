@@ -15,6 +15,7 @@ build/
 
 # Local data / outputs (DO NOT COMMIT)
 data/snapshots/
+src/data/snapshots/
 results/
 results_archive_*/
 
