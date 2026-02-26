@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 
-from quant_harbor.dashboard.tv_chart import render_lightweight_chart
+from quant_harbor.dashboard.tv_chart import render_lightweight_chart, render_lightweight_chart_dual
 from quant_harbor.regime import RegimeConfig, compute_regime
 from quant_harbor.dashboard.utils import (
     discover_runs,
@@ -331,40 +331,74 @@ def page_details_v2():
                     # Lightweight-charts expects markers sorted by time.
                     m = sorted(m, key=lambda x: (x.get("time", 0), x.get("text", "")))
 
-                # Regime overlay on TEST bars (15m): show background blocks by regime.
+                # Regime on TEST bars (15m): compute and persist.
+                # Render as a separate synced pane (TradingView-style):
+                # - Top: candles + trade markers
+                # - Bottom: regime histogram + direction_score line
+                reg = None
+                regime_hist = []
+                dir_line = []
                 try:
                     reg = compute_regime(bars, RegimeConfig())
-                    # compute contiguous blocks and render as semi-transparent spans
-                    blocks = []
-                    cur = None
-                    for ts, lab in reg["regime"].items():
-                        if cur is None:
-                            cur = [ts, ts, lab]
-                        elif lab == cur[2]:
-                            cur[1] = ts
-                        else:
-                            blocks.append(tuple(cur))
-                            cur = [ts, ts, lab]
-                    if cur is not None:
-                        blocks.append(tuple(cur))
 
-                    colors = {"Trend": "rgba(38,166,154,0.10)", "Range": "rgba(239,83,80,0.10)", "Neutral": "rgba(201,209,217,0.06)"}
-                    # Lightweight-charts doesn't support background regions natively.
-                    # As MVP: show a small regime timeline below the chart using Plotly.
-                    st.caption("Regime (15m) on TEST segment: Trend/Range/Neutral (computed from ER+ADX+Bandwidth; EMA-smoothed).")
-                    reg_plot = reg[["trend_score"]].copy()
-                    reg_plot.index = reg_plot.index.tz_convert("America/New_York").tz_localize(None)
-                    figr = go.Figure()
-                    figr.add_trace(go.Scatter(x=reg_plot.index, y=reg_plot["trend_score"], name="trend_score"))
-                    figr.update_layout(height=180, margin=dict(l=10, r=10, t=20, b=10))
-                    figr.add_hline(y=0.6, line_dash="dot")
-                    figr.add_hline(y=0.4, line_dash="dot")
-                    st.plotly_chart(figr, use_container_width=True)
-                except Exception:
-                    pass
+                    # Persist to run folder for audit/repro
+                    if test_dir is not None:
+                        outp = Path(test_dir).parent / "regime_test.parquet"
+                        reg_out = reg.copy()
+                        reg_out.reset_index().rename(columns={"timestamp": "dt_utc"}).to_parquet(outp, index=False)
 
-                html = render_lightweight_chart(candles=c, markers=m, height=560)
-                components.html(html, height=580, scrolling=False)
+                    if reg is not None and not reg.empty and "regime" in reg.columns:
+                        def _rcolor(r: str) -> str:
+                            if r == "Uptrend":
+                                return "#26a69a"
+                            if r == "Downtrend":
+                                return "#ef5350"
+                            if r == "Range":
+                                return "#42a5f5"
+                            return "#9e9e9e"
+
+                        def _rval(r: str) -> float:
+                            # values only used for vertical scaling; sign helps differentiate up/down.
+                            if r == "Uptrend":
+                                return 1.0
+                            if r == "Downtrend":
+                                return -1.0
+                            if r == "Range":
+                                return 0.6
+                            return 0.0
+
+                        for ts, rlab in reg["regime"].items():
+                            if pd.isna(rlab):
+                                continue
+                            rlab = str(rlab)
+                            if rlab == "Neutral":
+                                continue  # keep it clean
+                            regime_hist.append({
+                                "time": int(pd.Timestamp(ts).timestamp()),
+                                "value": float(_rval(rlab)),
+                                "color": _rcolor(rlab),
+                            })
+
+                        # Direction line (optional but helpful): [-1, 1]
+                        if "direction_score" in reg.columns:
+                            for ts, v in reg["direction_score"].items():
+                                if pd.isna(v):
+                                    continue
+                                dir_line.append({"time": int(pd.Timestamp(ts).timestamp()), "value": float(v)})
+
+                        st.caption("Regime pane: Uptrend(green) / Downtrend(red) / Range(blue). Neutral omitted.")
+                except Exception as e:
+                    st.warning(f"Regime compute failed: {e}")
+
+                html = render_lightweight_chart_dual(
+                    candles=c,
+                    markers=m,
+                    regime_hist=regime_hist,
+                    direction_line=dir_line,
+                    height_top=420,
+                    height_bottom=170,
+                )
+                components.html(html, height=620, scrolling=False)
             else:
                 fig.update_layout(height=520, margin=dict(l=10, r=10, t=30, b=10), xaxis_rangeslider_visible=False)
                 st.plotly_chart(fig, use_container_width=True)
