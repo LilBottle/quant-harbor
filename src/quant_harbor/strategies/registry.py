@@ -10,6 +10,9 @@ from .bollinger_mr import BollingerMR
 from .zscore_mr import ZScoreMR
 from .vwap_mr import VWAPDeviationMR
 from .pairs_mr import PairsZScoreMR
+from .ma_crossover import MovingAverageCrossover
+from .trend_pullback import TrendPullback
+from .supertrend import SuperTrend
 
 
 StrategyId = Literal[
@@ -18,6 +21,9 @@ StrategyId = Literal[
     "zscore_mr",
     "vwap_mr",
     "pairs_mr",
+    "ma_crossover",
+    "trend_pullback",
+    "supertrend",
 ]
 
 
@@ -90,12 +96,52 @@ class _Pairs(StrategySpec):
         }
 
 
+class _MACross(StrategySpec):
+    def default_param_grid(self):
+        return {
+            "fast": [10, 20, 30],
+            "slow": [50, 100, 150],
+            "ma_type": ["sma", "ema"],
+            "stop_pct": [0.008, 0.010, 0.012],
+            "take_pct": [0.010, 0.015, 0.020],
+            "max_bars_hold": [130, 260, 520],
+        }
+
+
+class _TrendPullback(StrategySpec):
+    def default_param_grid(self):
+        return {
+            "fast": [10, 20, 30],
+            "slow": [80, 100, 150],
+            "ma_type": ["ema"],
+            "atr_period": [14, 20],
+            "pullback_atr": [0.3, 0.5, 0.8],
+            "stop_pct": [0.008, 0.010, 0.012],
+            "take_pct": [0.012, 0.015, 0.020],
+            "max_bars_hold": [130, 260, 520],
+        }
+
+
+class _SuperTrend(StrategySpec):
+    def default_param_grid(self):
+        return {
+            "period": [7, 10, 14],
+            "multiplier": [2.0, 2.5, 3.0, 3.5],
+            "stop_pct": [0.008, 0.010, 0.012],
+            "take_pct": [0.012, 0.015, 0.020],
+            "max_bars_hold": [130, 260, 520],
+        }
+
+
 SPECS: Dict[str, StrategySpec] = {
     "rsi2": _RSI2(id="rsi2", name="RSI2 Mean Reversion", cls=RSI2Daytrade, n_legs=1),
     "bollinger_mr": _Boll(id="bollinger_mr", name="Bollinger Mean Reversion", cls=BollingerMR, n_legs=1),
     "zscore_mr": _Z(id="zscore_mr", name="Z-Score Mean Reversion", cls=ZScoreMR, n_legs=1),
     "vwap_mr": _VWAP(id="vwap_mr", name="VWAP Deviation Mean Reversion", cls=VWAPDeviationMR, n_legs=1),
     "pairs_mr": _Pairs(id="pairs_mr", name="Pairs Z-Score Mean Reversion", cls=PairsZScoreMR, n_legs=2),
+    "ma_crossover": _MACross(id="ma_crossover", name="Moving Average Crossover", cls=MovingAverageCrossover, n_legs=1),
+    "trend_pullback": _TrendPullback(id="trend_pullback", name="Trend Pullback", cls=TrendPullback, n_legs=1),
+    "supertrend": _SuperTrend(id="supertrend", name="SuperTrend", cls=SuperTrend, n_legs=1),
 }
 
 
