@@ -52,20 +52,23 @@ class SuperTrendIndicator(bt.Indicator):
                 self.lines.dir[0] = float('nan')
             return
 
-        if i == 0:
+        # Initialize when we have our first *valid* bands.
+        # NOTE: backtrader will call next() throughout warmup, so i may be > 0 even
+        # when prior values were NaN. If prev_dir is NaN and we carry it forward, the
+        # whole state machine can get stuck at NaN forever (=> zero trades).
+        if i == 0 or math.isnan(float(self.lines.dir[-1])):
             self.lines.upper[0] = bu0
             self.lines.lower[0] = bl0
-            # initialize direction from price vs bands (fallback to up)
-            close0 = float(self.data.close[0])
-            dir0 = 1.0 if close0 >= bu0 else -1.0
-            self.lines.dir[0] = dir0
-            self.lines.st[0] = bl0 if dir0 > 0 else bu0
+            # Common SuperTrend convention: start in uptrend so ST begins at lower band.
+            # (Starting from upper band makes flips extremely rare and is not what we want.)
+            self.lines.dir[0] = 1.0
+            self.lines.st[0] = bl0
             return
 
-        prev_upper = self.lines.upper[-1]
-        prev_lower = self.lines.lower[-1]
-        prev_dir = self.lines.dir[-1]
-        prev_close = self.data.close[-1]
+        prev_upper = float(self.lines.upper[-1])
+        prev_lower = float(self.lines.lower[-1])
+        prev_dir = float(self.lines.dir[-1])
+        prev_close = float(self.data.close[-1])
 
         # final upper
         bu = float(self.basic_upper[0])
