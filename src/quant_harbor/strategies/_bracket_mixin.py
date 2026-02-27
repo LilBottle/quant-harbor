@@ -69,6 +69,13 @@ class LongBracketMixin:
 
             # Exit fill
             if order.issell():
+                # If this was a manual close (self.close()), it is stored in order_entry.
+                # Always clear it on completion, otherwise strategies that gate on
+                # `if self.order_entry is not None: return` will freeze forever.
+                oe = getattr(self, "order_entry", None)
+                if oe is not None and getattr(order, 'ref', None) == getattr(oe, 'ref', None):
+                    self.order_entry = None
+
                 # cancel the other child
                 if order is getattr(self, "order_stop", None):
                     self.order_stop = None

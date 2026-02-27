@@ -138,11 +138,20 @@ class SuperTrend(LongBracketMixin, bt.Strategy):
         self._reset_orders()
         self.entry_bar = None
         self.entry_price = None
+        self.last_exit_bar = None
 
         self.st = SuperTrendIndicator(self.data, period=self.p.period, multiplier=self.p.multiplier)
 
         # cross of direction: from -1 to +1 => entry, +1 to -1 => exit
         self._prev_dir = None
+
+    def notify_order(self, order):
+        # Let LongBracketMixin manage bracket children + entry/exit bookkeeping.
+        super().notify_order(order)
+
+        # Track last exit bar so we can optionally re-enter immediately when trend stays up.
+        if order.status == order.Completed and order.issell():
+            self.last_exit_bar = len(self)
 
     def next(self):
         # Only block when we have a pending *manual* entry/close order.
@@ -187,10 +196,20 @@ class SuperTrend(LongBracketMixin, bt.Strategy):
 
             # (3) Optional re-entry: if we're in uptrend but got stopped/took profit, re-enter
             # when price reclaims the supertrend line (cross up).
-            if bool(self.p.allow_reentry) and dir_ > 0 and (not math.isnan(st_prev)):
-                cross_up = (close_prev <= st_prev) and (close0 > st_line)
-                if cross_up:
+            if bool(self.p.allow_reentry) and dir_ > 0:
+                # Re-entry policy:
+                # - If we *just* exited via bracket while still in an uptrend, re-enter immediately
+                #   (otherwise with wide ST bands you can get "one month of trades then nothing").
+                # - Otherwise, require a cross back above the ST line.
+                just_exited = (self.last_exit_bar is not None) and ((len(self) - self.last_exit_bar) <= 1)
+                if just_exited and close0 > st_line:
                     self.order_entry = self.buy()
+                    return
+
+                if not math.isnan(st_prev):
+                    cross_up = (close_prev <= st_prev) and (close0 > st_line)
+                    if cross_up:
+                        self.order_entry = self.buy()
             return
 
         # --- exits ---
