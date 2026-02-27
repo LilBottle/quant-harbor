@@ -11,6 +11,7 @@ import pandas as pd
 
 from .analyzers import EquityCurveAnalyzer, TradeListAnalyzer
 from .metrics import compute_drawdown_from_equity, compute_trade_metrics
+from .sizers import RiskStopPctSizer
 
 UTC = ZoneInfo("UTC")
 
@@ -19,8 +20,15 @@ UTC = ZoneInfo("UTC")
 class BacktestConfig:
     symbol: str = "QQQ"
     cash: float = 2000.0
+
+    # Position sizing
+    risk_pct_per_trade: float = 0.01  # fixed risk per trade (as % of equity)
+    max_cash_pct_per_trade: float = 0.95  # cap cash deployed per entry
+
+    # Costs
     slippage_bps_side: float = 5.0  # 5 bps per side
     commission_pct: float = 0.0
+
     # Sensitivity analysis: rerun the same strategy under alternative slippage levels.
     slippage_sensitivity_bps: tuple[float, ...] = (10.0, 20.0)
 
@@ -103,6 +111,13 @@ def run_backtest_df(
         cerebro.broker.setcash(cfg.cash)
         cerebro.broker.setcommission(commission=cfg.commission_pct)
         cerebro.broker.set_slippage_perc(perc=float(slippage_bps_side) / 10000.0)
+
+        # Risk-based sizing (stop-distance sizing via strategy.p.stop_pct)
+        cerebro.addsizer(
+            RiskStopPctSizer,
+            risk_pct=float(cfg.risk_pct_per_trade),
+            max_cash_pct=float(cfg.max_cash_pct_per_trade),
+        )
 
         cerebro.addstrategy(strategy_cls, **strat_params)
 
