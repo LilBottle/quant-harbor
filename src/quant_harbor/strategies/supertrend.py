@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import backtrader as bt
 
 from ._bracket_mixin import LongBracketMixin
@@ -34,12 +36,30 @@ class SuperTrendIndicator(bt.Indicator):
 
     def next(self):
         i = len(self) - 1
+
+        # If ATR (or derived bands) are not ready, emit NaNs to avoid contaminating state.
+        atr0 = float(self.atr[0]) if self.atr[0] is not None else float('nan')
+        bu0 = float(self.basic_upper[0]) if self.basic_upper[0] is not None else float('nan')
+        bl0 = float(self.basic_lower[0]) if self.basic_lower[0] is not None else float('nan')
+        if math.isnan(atr0) or math.isnan(bu0) or math.isnan(bl0):
+            self.lines.upper[0] = float('nan')
+            self.lines.lower[0] = float('nan')
+            self.lines.st[0] = float('nan')
+            # keep previous dir if exists; else NaN
+            if i > 0:
+                self.lines.dir[0] = self.lines.dir[-1]
+            else:
+                self.lines.dir[0] = float('nan')
+            return
+
         if i == 0:
-            self.lines.upper[0] = self.basic_upper[0]
-            self.lines.lower[0] = self.basic_lower[0]
-            # default to up
-            self.lines.dir[0] = 1.0
-            self.lines.st[0] = self.lines.lower[0]
+            self.lines.upper[0] = bu0
+            self.lines.lower[0] = bl0
+            # initialize direction from price vs bands (fallback to up)
+            close0 = float(self.data.close[0])
+            dir0 = 1.0 if close0 >= bu0 else -1.0
+            self.lines.dir[0] = dir0
+            self.lines.st[0] = bl0 if dir0 > 0 else bu0
             return
 
         prev_upper = self.lines.upper[-1]
@@ -48,15 +68,19 @@ class SuperTrendIndicator(bt.Indicator):
         prev_close = self.data.close[-1]
 
         # final upper
-        bu = self.basic_upper[0]
-        if bu < prev_upper or prev_close > prev_upper:
+        bu = float(self.basic_upper[0])
+        if (not math.isnan(prev_upper)) and (bu < prev_upper or prev_close > prev_upper):
+            fu = bu
+        elif math.isnan(prev_upper):
             fu = bu
         else:
             fu = prev_upper
 
         # final lower
-        bl = self.basic_lower[0]
-        if bl > prev_lower or prev_close < prev_lower:
+        bl = float(self.basic_lower[0])
+        if (not math.isnan(prev_lower)) and (bl > prev_lower or prev_close < prev_lower):
+            fl = bl
+        elif math.isnan(prev_lower):
             fl = bl
         else:
             fl = prev_lower
@@ -104,6 +128,7 @@ class SuperTrend(LongBracketMixin, bt.Strategy):
         take_pct=0.015,
         max_bars_hold=260,
         allow_reentry=True,
+        enter_on_start=True,  # if first valid regime is uptrend, allow initial entry
     )
 
     def __init__(self):
@@ -117,14 +142,22 @@ class SuperTrend(LongBracketMixin, bt.Strategy):
         self._prev_dir = None
 
     def next(self):
-        if self.order_entry or self.order_stop or self.order_take:
+        # Only block when we have a pending *manual* entry/close order.
+        # IMPORTANT: Do NOT block just because bracket children exist;
+        # we still need to react to trend flips and force-close.
+        if self.order_entry is not None:
             return
 
-        dir_ = float(self.st.dir[0])
+        # Warmup guard: indicator must be valid
+        dir_val = float(self.st.dir[0]) if self.st.dir[0] is not None else float('nan')
+        st_line = float(self.st.st[0]) if self.st.st[0] is not None else float('nan')
+        if math.isnan(dir_val) or math.isnan(st_line):
+            return
+
+        dir_ = dir_val
         prev = self._prev_dir
         self._prev_dir = dir_
 
-        st_line = float(self.st.st[0])
         close0 = float(self.data.close[0])
 
         # Previous bar values (guard for first bar)
@@ -139,21 +172,26 @@ class SuperTrend(LongBracketMixin, bt.Strategy):
 
         # --- entries ---
         if not self.position:
-            # Classic entry: down->up flip
+            # (1) Start-of-series entry: if first valid regime is uptrend, enter once.
+            if bool(self.p.enter_on_start) and prev is None and dir_ > 0:
+                self.order_entry = self.buy()
+                return
+
+            # (2) Classic entry: down->up flip
             if flipped_up:
                 self.order_entry = self.buy()
                 return
 
-            # Optional re-entry: if we're in uptrend but got stopped/took profit, re-enter
+            # (3) Optional re-entry: if we're in uptrend but got stopped/took profit, re-enter
             # when price reclaims the supertrend line (cross up).
-            if bool(self.p.allow_reentry) and dir_ > 0:
+            if bool(self.p.allow_reentry) and dir_ > 0 and (not math.isnan(st_prev)):
                 cross_up = (close_prev <= st_prev) and (close0 > st_line)
                 if cross_up:
                     self.order_entry = self.buy()
             return
 
         # --- exits ---
-        # Exit on downtrend flip
+        # Exit on downtrend flip / in downtrend
         if flipped_down or dir_ < 0:
             self._cancel_children()
             self.order_entry = self.close()
