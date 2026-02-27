@@ -132,6 +132,11 @@ class SuperTrend(LongBracketMixin, bt.Strategy):
         max_bars_hold=260,
         allow_reentry=True,
         enter_on_start=True,  # if first valid regime is uptrend, allow initial entry
+
+        # Exit tuning
+        disable_take_profit=False,
+        use_trailing_stop=False,
+        trail_pct=0.0,  # e.g. 0.02 = 2% trailing stop
     )
 
     def __init__(self):

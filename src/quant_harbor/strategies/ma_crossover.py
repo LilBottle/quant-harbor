@@ -27,6 +27,11 @@ class MovingAverageCrossover(LongBracketMixin, bt.Strategy):
         stop_pct=0.010,
         take_pct=0.015,
         max_bars_hold=260,  # ~10 trading days on 15m bars
+
+        # Exit tuning
+        disable_take_profit=False,
+        use_trailing_stop=False,
+        trail_pct=0.0,
     )
 
     def __init__(self):

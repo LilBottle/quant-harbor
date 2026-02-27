@@ -57,6 +57,11 @@ class VWAPDeviationMR(LongBracketMixin, bt.Strategy):
         stop_pct=0.010,
         take_pct=0.010,
         max_bars_hold=12,
+
+        # Exit tuning
+        disable_take_profit=False,
+        use_trailing_stop=False,
+        trail_pct=0.0,
     )
 
     def __init__(self):

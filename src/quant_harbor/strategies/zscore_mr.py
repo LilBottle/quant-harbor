@@ -25,6 +25,11 @@ class ZScoreMR(LongBracketMixin, bt.Strategy):
         take_pct=0.012,
         max_bars_hold=24,
         min_std=1e-8,
+
+        # Exit tuning
+        disable_take_profit=False,
+        use_trailing_stop=False,
+        trail_pct=0.0,
     )
 
     def __init__(self):
