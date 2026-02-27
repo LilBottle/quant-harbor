@@ -80,11 +80,18 @@ class SuperTrendIndicator(bt.Indicator):
 class SuperTrend(LongBracketMixin, bt.Strategy):
     """SuperTrend strategy (long-only).
 
-    Entry:
-    - Enter when SuperTrend direction flips to up (+1).
+    Important behavior choice (this was the main bug source):
+    - If we ONLY enter on a "Down → Up" flip, then any stop/take exit during an uptrend
+      would leave us flat until the next full flip cycle. That can create long periods of
+      *zero trades* depending on params/window.
+
+    This implementation supports two entry modes:
+    - flip-only entry (classic): enter on Down→Up
+    - re-entry-on-uptrend: if flat while dir==Up, allow re-entry when price crosses back
+      above the supertrend line (useful when bracket exits occur)
 
     Exit:
-    - Exit when direction flips to down (-1) OR time stop.
+    - Exit when direction flips to down (-1) OR close crosses below supertrend line OR time stop.
 
     Risk:
     - stop/take via LongBracketMixin.
@@ -96,6 +103,7 @@ class SuperTrend(LongBracketMixin, bt.Strategy):
         stop_pct=0.010,
         take_pct=0.015,
         max_bars_hold=260,
+        allow_reentry=True,
     )
 
     def __init__(self):
@@ -116,19 +124,48 @@ class SuperTrend(LongBracketMixin, bt.Strategy):
         prev = self._prev_dir
         self._prev_dir = dir_
 
+        st_line = float(self.st.st[0])
+        close0 = float(self.data.close[0])
+
+        # Previous bar values (guard for first bar)
+        if len(self) >= 2:
+            st_prev = float(self.st.st[-1])
+            close_prev = float(self.data.close[-1])
+        else:
+            st_prev, close_prev = st_line, close0
+
+        flipped_up = (prev is not None) and (prev < 0) and (dir_ > 0)
+        flipped_down = (prev is not None) and (prev > 0) and (dir_ < 0)
+
+        # --- entries ---
         if not self.position:
-            # If we start inside an uptrend, we should be able to enter.
-            # Entry condition: direction is up and either (a) we just flipped up or (b) we are in uptrend after warmup.
-            if dir_ > 0 and (prev is None or prev < 0):
+            # Classic entry: down->up flip
+            if flipped_up:
                 self.order_entry = self.buy()
+                return
+
+            # Optional re-entry: if we're in uptrend but got stopped/took profit, re-enter
+            # when price reclaims the supertrend line (cross up).
+            if bool(self.p.allow_reentry) and dir_ > 0:
+                cross_up = (close_prev <= st_prev) and (close0 > st_line)
+                if cross_up:
+                    self.order_entry = self.buy()
             return
 
-        # Exit on downtrend
-        if dir_ < 0 and (prev is None or prev > 0):
+        # --- exits ---
+        # Exit on downtrend flip
+        if flipped_down or dir_ < 0:
             self._cancel_children()
             self.order_entry = self.close()
             return
 
+        # Safety exit: if price closes below ST line while still marked uptrend
+        if close0 < st_line:
+            self._cancel_children()
+            self.order_entry = self.close()
+            return
+
+        # Time stop
         if self.entry_bar is not None and (len(self) - self.entry_bar) >= int(self.p.max_bars_hold):
             self._cancel_children()
             self.order_entry = self.close()
