@@ -65,11 +65,12 @@ class SuperTrendIndicator(bt.Indicator):
         self.lines.lower[0] = fl
 
         # direction switch
+        # Use CURRENT final bands for the flip condition.
         close = self.data.close[0]
         dir_ = prev_dir
-        if prev_dir > 0 and close < prev_lower:
+        if prev_dir > 0 and close < fl:
             dir_ = -1.0
-        elif prev_dir < 0 and close > prev_upper:
+        elif prev_dir < 0 and close > fu:
             dir_ = 1.0
 
         self.lines.dir[0] = dir_
@@ -115,15 +116,15 @@ class SuperTrend(LongBracketMixin, bt.Strategy):
         prev = self._prev_dir
         self._prev_dir = dir_
 
-        if prev is None:
-            return
-
         if not self.position:
-            if prev < 0 and dir_ > 0:
+            # If we start inside an uptrend, we should be able to enter.
+            # Entry condition: direction is up and either (a) we just flipped up or (b) we are in uptrend after warmup.
+            if dir_ > 0 and (prev is None or prev < 0):
                 self.order_entry = self.buy()
             return
 
-        if prev > 0 and dir_ < 0:
+        # Exit on downtrend
+        if dir_ < 0 and (prev is None or prev > 0):
             self._cancel_children()
             self.order_entry = self.close()
             return
