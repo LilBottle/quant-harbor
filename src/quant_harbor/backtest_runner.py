@@ -104,9 +104,34 @@ def run_backtest_df(
     def _run_once(slippage_bps_side: float) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
         cerebro = bt.Cerebro(stdstats=False)
 
+        feeds = []
         for i, df_bt in enumerate(df_bt_list):
             feed = _make_feed(df_bt)
+            feeds.append(feed)
             cerebro.adddata(feed, name=f"leg{i}")
+
+        # Some strategies require a higher-timeframe feed (e.g. daily regime filter).
+        # Backtrader resample can be brittle with certain feeds; we build the daily bars in pandas
+        # and add them as a second data stream.
+        if (strategy_id or strategy_cls.__name__) in {"st_daily_rsi2"}:
+            if len(dfs_utc) != 1:
+                raise ValueError("st_daily_rsi2 currently supports single-leg only")
+
+            # Build daily OHLCV on ET calendar days from the intraday feed.
+            df0 = dfs_utc[0].copy().sort_index().tz_convert(ZoneInfo('America/New_York'))
+            daily = (
+                df0.resample('1D')
+                .agg({'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'})
+                .dropna()
+            )
+            # Convert back to UTC tz-aware for the rest of the pipeline.
+            if daily.index.tz is None:
+                daily.index = daily.index.tz_localize(ZoneInfo('America/New_York'))
+            daily = daily.tz_convert(UTC)
+
+            daily_bt = _to_bt_df(daily)
+            daily_feed = _make_feed(daily_bt)
+            cerebro.adddata(daily_feed, name='daily')
 
         cerebro.broker.setcash(cfg.cash)
         cerebro.broker.setcommission(commission=cfg.commission_pct)

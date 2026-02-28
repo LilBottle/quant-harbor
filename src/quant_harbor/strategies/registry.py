@@ -13,6 +13,7 @@ from .pairs_mr import PairsZScoreMR
 from .ma_crossover import MovingAverageCrossover
 from .trend_pullback import TrendPullback
 from .supertrend import SuperTrend
+from .st_daily_rsi2 import SuperTrendDailyRSI2
 
 
 StrategyId = Literal[
@@ -24,6 +25,7 @@ StrategyId = Literal[
     "ma_crossover",
     "trend_pullback",
     "supertrend",
+    "st_daily_rsi2",
 ]
 
 
@@ -133,6 +135,23 @@ class _SuperTrend(StrategySpec):
         }
 
 
+class _STDailyRSI2(StrategySpec):
+    def default_param_grid(self):
+        return {
+            "st_period": [10, 14, 20],
+            "st_multiplier": [2.5, 3.0, 3.5],
+            "rsi_period": [2, 3],
+            "entry_rsi": [10.0, 15.0, 20.0],
+            "exit_rsi": [45.0, 50.0, 55.0],
+            "stop_pct": [0.006, 0.008, 0.010],
+            "take_pct": [0.0],  # default: no take profit; allow trailing/flip/time to exit
+            "max_bars_hold": [12, 24, 36],
+            "disable_take_profit": [True],
+            "use_trailing_stop": [True],
+            "trail_pct": [0.02, 0.025, 0.03],
+        }
+
+
 SPECS: Dict[str, StrategySpec] = {
     "rsi2": _RSI2(id="rsi2", name="RSI2 Mean Reversion", cls=RSI2Daytrade, n_legs=1),
     "bollinger_mr": _Boll(id="bollinger_mr", name="Bollinger Mean Reversion", cls=BollingerMR, n_legs=1),
@@ -142,6 +161,7 @@ SPECS: Dict[str, StrategySpec] = {
     "ma_crossover": _MACross(id="ma_crossover", name="Moving Average Crossover", cls=MovingAverageCrossover, n_legs=1),
     "trend_pullback": _TrendPullback(id="trend_pullback", name="Trend Pullback", cls=TrendPullback, n_legs=1),
     "supertrend": _SuperTrend(id="supertrend", name="SuperTrend", cls=SuperTrend, n_legs=1),
+    "st_daily_rsi2": _STDailyRSI2(id="st_daily_rsi2", name="Daily SuperTrend + RSI2 (15m)", cls=SuperTrendDailyRSI2, n_legs=1),
 }
 
 
