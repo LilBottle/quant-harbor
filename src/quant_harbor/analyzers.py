@@ -17,6 +17,7 @@ class TradeRecord:
     pnl: float
     pnl_comm: float
     bar_len: int
+    exit_reason: Optional[str] = None
 
 
 class TradeListAnalyzer(bt.Analyzer):
@@ -36,6 +37,41 @@ class TradeListAnalyzer(bt.Analyzer):
     def start(self):
         self.trades: List[TradeRecord] = []
         self._open: Dict[int, Dict[str, Any]] = {}
+        # Best-effort exit reason capture via order.info['exit_reason'].
+        # Key by dtclose float (bt date num) because trade.ref/order.ref differ.
+        self._exit_reason_by_dtclose: Dict[float, str] = {}
+
+    def notify_order(self, order):
+        if order.status != order.Completed:
+            return
+        if not order.issell():
+            return
+
+        reason = None
+        try:
+            reason = getattr(order, 'info', {}).get('exit_reason', None)
+        except Exception:
+            reason = None
+
+        # fallback heuristic based on order type
+        if reason is None:
+            try:
+                if order.exectype == bt.Order.StopTrail:
+                    reason = 'stop_trail'
+                elif order.exectype == bt.Order.Stop:
+                    reason = 'stop'
+                elif order.exectype == bt.Order.Limit:
+                    reason = 'take_profit'
+                else:
+                    reason = 'close'
+            except Exception:
+                reason = 'close'
+
+        try:
+            dtclose = float(order.executed.dt)
+            self._exit_reason_by_dtclose[dtclose] = str(reason)
+        except Exception:
+            pass
 
     def notify_trade(self, trade):
         # cache entry info when a trade is opened
@@ -72,6 +108,12 @@ class TradeListAnalyzer(bt.Analyzer):
             exit_price = float(entry_price + (float(trade.pnl) / entry_size))
 
         # If direction unknown, we still record for audit, but set size=0.
+        exit_reason = None
+        try:
+            exit_reason = self._exit_reason_by_dtclose.pop(float(trade.dtclose), None)
+        except Exception:
+            exit_reason = None
+
         rec = TradeRecord(
             entry_dt=entry_dt,
             exit_dt=exit_dt,
@@ -82,6 +124,7 @@ class TradeListAnalyzer(bt.Analyzer):
             pnl=float(trade.pnl),
             pnl_comm=float(trade.pnlcomm),
             bar_len=int(trade.barlen),
+            exit_reason=exit_reason,
         )
         self.trades.append(rec)
 

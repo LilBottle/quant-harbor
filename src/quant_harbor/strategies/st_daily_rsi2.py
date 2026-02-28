@@ -91,6 +91,10 @@ class SuperTrendDailyRSI2(LongBracketMixin, bt.Strategy):
         if self.position and (flipped_down or (not daily_up)):
             self._cancel_children()
             self.order_entry = self.close()
+            try:
+                self.order_entry.addinfo(exit_reason="regime_flip_down" if flipped_down else "regime_not_up")
+            except Exception:
+                pass
             return
 
         # --- entries ---
@@ -116,10 +120,18 @@ class SuperTrendDailyRSI2(LongBracketMixin, bt.Strategy):
         if (not math.isnan(rsi0)) and (rsi0 >= float(self.p.exit_rsi)):
             self._cancel_children()
             self.order_entry = self.close()
+            try:
+                self.order_entry.addinfo(exit_reason="rsi_exit")
+            except Exception:
+                pass
             return
 
         # time stop on intraday bars
         if self.entry_bar is not None and (len(self) - self.entry_bar) >= int(self.p.max_bars_hold):
             self._cancel_children()
             self.order_entry = self.close()
+            try:
+                self.order_entry.addinfo(exit_reason="time_stop")
+            except Exception:
+                pass
             return

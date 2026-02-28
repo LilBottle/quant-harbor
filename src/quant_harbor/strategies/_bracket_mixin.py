@@ -55,16 +55,28 @@ class LongBracketMixin:
 
         if use_trailing or (trail_pct and trail_pct > 0):
             # Backtrader expects trailpercent as a fraction (0.02 = 2%)
-            self.order_stop = self.sell(exectype=bt.Order.StopTrail, trailpercent=float(trail_pct))
+            self.order_stop = self.sell(
+                exectype=bt.Order.StopTrail,
+                trailpercent=float(trail_pct),
+                info=dict(exit_reason="stop_trail"),
+            )
         else:
             stop_price = entry_price * (1.0 - float(stop_pct))
-            self.order_stop = self.sell(exectype=bt.Order.Stop, price=stop_price)
+            self.order_stop = self.sell(
+                exectype=bt.Order.Stop,
+                price=stop_price,
+                info=dict(exit_reason="stop"),
+            )
 
         # --- take profit ---
         disable_take = bool(getattr(getattr(self, 'p', None), 'disable_take_profit', False))
         if (not disable_take) and (take_pct is not None) and float(take_pct) > 0:
             take_price = entry_price * (1.0 + float(take_pct))
-            self.order_take = self.sell(exectype=bt.Order.Limit, price=take_price)
+            self.order_take = self.sell(
+                exectype=bt.Order.Limit,
+                price=take_price,
+                info=dict(exit_reason="take_profit"),
+            )
         else:
             self.order_take = None
 
