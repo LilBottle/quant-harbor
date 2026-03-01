@@ -19,15 +19,17 @@ class SuperTrendDailyRSI2(LongBracketMixin, bt.Strategy):
       - Daily SuperTrend direction is UP (dir > 0)
       - Intraday RSI <= entry_rsi (oversold)
 
-    Exits:
-      - Primary: RSI mean reversion: RSI >= exit_rsi
+    Exits (configurable):
+      - Optional RSI mean reversion exit: RSI >= exit_rsi (use_rsi_exit=True)
+      - Optional profit trailing activation: when close > SMA(ma_period), replace fixed stop with trailing stop
+        (enable_ma_profit_trail=True)
       - Regime risk-off: Daily SuperTrend flips down (dir < 0) => close
       - Time stop: max_bars_hold (15m bars)
-      - Plus bracket children (stop/take or trailing stop) via LongBracketMixin
+      - Plus bracket children (stop/take) via LongBracketMixin
 
     Notes:
-      - This is designed to reduce whipsaw by only taking RSI2 dips inside a higher-timeframe uptrend.
-      - Requires the runner to add a daily resample feed.
+      - Default behavior remains the RSI exit to preserve backward compatibility.
+      - The MA-profit-trailing mode is meant to let price action "prove" strength before switching to a trailing stop.
     """
 
     params = dict(
@@ -39,16 +41,21 @@ class SuperTrendDailyRSI2(LongBracketMixin, bt.Strategy):
         rsi_period=2,
         entry_rsi=15.0,
         exit_rsi=50.0,
+        use_rsi_exit=True,
 
         # Risk
         stop_pct=0.008,
         take_pct=0.012,
         max_bars_hold=24,
 
-        # Exit tuning (handled by LongBracketMixin)
+        # Bracket config (handled by LongBracketMixin)
         disable_take_profit=False,
         use_trailing_stop=False,
         trail_pct=0.0,
+
+        # Profit trailing activation (optional)
+        enable_ma_profit_trail=False,
+        ma_period=5,
 
         # If daily regime is UP at the first valid point, allow initial entry.
         enter_on_start=True,
@@ -70,7 +77,10 @@ class SuperTrendDailyRSI2(LongBracketMixin, bt.Strategy):
         self.data1 = self.datas[1]  # daily
 
         self.rsi = bt.indicators.RSI(self.data0.close, period=self.p.rsi_period)
+        self.sma = bt.indicators.SMA(self.data0.close, period=int(self.p.ma_period))
         self.st_d = SuperTrendIndicator(self.data1, period=self.p.st_period, multiplier=self.p.st_multiplier)
+
+        self._profit_trail_active = False
 
     def next(self):
         # block only on pending manual order
@@ -115,16 +125,41 @@ class SuperTrendDailyRSI2(LongBracketMixin, bt.Strategy):
                 self.order_entry = self.buy()
             return
 
+        # --- optional profit trailing activation (while daily_up) ---
+        if bool(self.p.enable_ma_profit_trail) and (not self._profit_trail_active):
+            c0 = float(self.data0.close[0]) if self.data0.close[0] is not None else float('nan')
+            sma0 = float(self.sma[0]) if self.sma[0] is not None else float('nan')
+            if (not math.isnan(c0)) and (not math.isnan(sma0)) and (c0 > sma0):
+                # Replace fixed stop with trailing stop once price is above SMA(ma_period).
+                # This is used as a profit-protection / take-profit mechanism.
+                if getattr(self, 'order_stop', None) is not None:
+                    try:
+                        self.cancel(self.order_stop)
+                    except Exception:
+                        pass
+                    self.order_stop = None
+
+                trail_pct = float(getattr(self.p, 'trail_pct', 0.0) or 0.0)
+                # only activate if trail_pct is valid
+                if trail_pct > 0:
+                    self.order_stop = self.sell(
+                        exectype=bt.Order.StopTrail,
+                        trailpercent=trail_pct,
+                        info=dict(exit_reason='profit_trail'),
+                    )
+                    self._profit_trail_active = True
+
         # --- exits (while daily_up) ---
-        rsi0 = float(self.rsi[0]) if self.rsi[0] is not None else float('nan')
-        if (not math.isnan(rsi0)) and (rsi0 >= float(self.p.exit_rsi)):
-            self._cancel_children()
-            self.order_entry = self.close()
-            try:
-                self.order_entry.addinfo(exit_reason="rsi_exit")
-            except Exception:
-                pass
-            return
+        if bool(self.p.use_rsi_exit):
+            rsi0 = float(self.rsi[0]) if self.rsi[0] is not None else float('nan')
+            if (not math.isnan(rsi0)) and (rsi0 >= float(self.p.exit_rsi)):
+                self._cancel_children()
+                self.order_entry = self.close()
+                try:
+                    self.order_entry.addinfo(exit_reason="rsi_exit")
+                except Exception:
+                    pass
+                return
 
         # time stop on intraday bars
         if self.entry_bar is not None and (len(self) - self.entry_bar) >= int(self.p.max_bars_hold):
