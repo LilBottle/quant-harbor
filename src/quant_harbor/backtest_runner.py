@@ -9,6 +9,8 @@ import json
 import backtrader as bt
 import pandas as pd
 
+import numpy as np
+
 from .analyzers import EquityCurveAnalyzer, TradeListAnalyzer
 from .metrics import compute_drawdown_from_equity, compute_trade_metrics
 from .sizers import RiskStopPctSizer
@@ -44,6 +46,9 @@ def _to_bt_df(df_utc: pd.DataFrame) -> pd.DataFrame:
     if df_utc.index.tz is None:
         raise ValueError("df index must be tz-aware (UTC)")
     df_bt = df_utc.copy().sort_index()
+    # Add a tiny epsilon to the close price to prevent ZeroDivisionError in indicators (like RSI) 
+    # when price remains perfectly flat for several bars (common in low liquidity or resampled data).
+    df_bt['close'] = df_bt['close'] + 1e-9
     df_bt.index = df_bt.index.tz_convert(UTC).tz_localize(None)
     return df_bt
 
