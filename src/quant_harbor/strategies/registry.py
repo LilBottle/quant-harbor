@@ -142,12 +142,17 @@ class _STDailyRSI2(StrategySpec):
             "st_multiplier": [3.0],
             "rsi_period": [2],
             "entry_rsi": [15.0],
-            "stop_pct": [0.006],
-            "take_pct": [0.0],
+            "roc_period": [4],
+            "roc_entry_th": [0.0, -0.005],
+            "stop_pct": [0.006, 0.008],
             "max_bars_hold": [72],
+            "max_bars_hold_max": [216],
             "enable_ma_profit_trail": [1],
+            "trail_pnl_th": [0.008, 0.012],
             "ma_period": [5],
-            "trail_pct": [0.005],
+            "atr_period": [14],
+            "atr_mult": [2.5, 3.5],
+            "trail_pct": [0.0], # 0 means use ATR
         }
 
 

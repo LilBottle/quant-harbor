@@ -22,7 +22,7 @@ class BacktestConfig:
     cash: float = 2000.0
 
     # Position sizing
-    risk_pct_per_trade: float = 0.01  # fixed risk per trade (as % of equity)
+    risk_pct_per_trade: float = 0.01  # Back to steady 1%
     max_cash_pct_per_trade: float = 0.95  # cap cash deployed per entry
 
     # Costs
