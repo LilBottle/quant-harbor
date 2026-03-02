@@ -331,9 +331,16 @@ def page_details_v2():
                     # Lightweight-charts expects markers sorted by time.
                     m = sorted(m, key=lambda x: (x.get("time", 0), x.get("text", "")))
 
+                # SMA5 (requested by user)
+                sma_data = []
+                bars["sma5"] = bars["close"].rolling(5).mean()
+                for ts, row in bars.iterrows():
+                    if pd.notna(row["sma5"]):
+                        sma_data.append({"time": int(ts.timestamp()), "value": float(row["sma5"])})
+
                 # Regime on TEST bars (15m): compute and persist.
                 # Render as a separate synced pane (TradingView-style):
-                # - Top: candles + trade markers
+                # - Top: candles + trade markers + SMA
                 # - Bottom: regime histogram + direction_score line
                 reg = None
                 regime_hist = []
@@ -395,6 +402,7 @@ def page_details_v2():
                     markers=m,
                     regime_hist=regime_hist,
                     direction_line=dir_line,
+                    sma_line=sma_data,
                     height_top=420,
                     height_bottom=170,
                 )

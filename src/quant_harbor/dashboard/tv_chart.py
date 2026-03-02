@@ -8,14 +8,17 @@ def render_lightweight_chart(
     *,
     candles: list[dict[str, Any]],
     markers: list[dict[str, Any]] | None = None,
+    sma_line: list[dict[str, Any]] | None = None,
     height: int = 560,
 ) -> str:
     """Single-pane TradingView-like candlestick chart."""
 
     markers = markers or []
+    sma_line = sma_line or []
 
     data_json = json.dumps(candles, ensure_ascii=False)
     markers_json = json.dumps(markers, ensure_ascii=False)
+    sma_json = json.dumps(sma_line, ensure_ascii=False)
 
     return f"""<!doctype html>
 <html>
@@ -59,6 +62,17 @@ def render_lightweight_chart(
         series.setMarkers(markers);
       }}
 
+      const smaData = {sma_json};
+      if (smaData && smaData.length) {{
+        const smaSeries = chart.addLineSeries({{
+          color: '#2962FF',
+          lineWidth: 2,
+          lastValueVisible: true,
+          priceLineVisible: false,
+        }});
+        smaSeries.setData(smaData);
+      }}
+
       chart.timeScale().fitContent();
 
       // Resize
@@ -79,12 +93,13 @@ def render_lightweight_chart_dual(
     markers: list[dict[str, Any]] | None = None,
     regime_hist: list[dict[str, Any]] | None = None,
     direction_line: list[dict[str, Any]] | None = None,
+    sma_line: list[dict[str, Any]] | None = None,
     height_top: int = 420,
     height_bottom: int = 160,
 ) -> str:
     """Two-pane chart with synced time axis.
 
-    Pane 1: Candles (+ trade markers)
+    Pane 1: Candles (+ trade markers) + optional SMA
     Pane 2: Regime histogram (colored) + optional direction line
 
     Both panes stay in sync when zooming/panning either one.
@@ -93,11 +108,13 @@ def render_lightweight_chart_dual(
     markers = markers or []
     regime_hist = regime_hist or []
     direction_line = direction_line or []
+    sma_line = sma_line or []
 
     data_json = json.dumps(candles, ensure_ascii=False)
     markers_json = json.dumps(markers, ensure_ascii=False)
     hist_json = json.dumps(regime_hist, ensure_ascii=False)
     dir_json = json.dumps(direction_line, ensure_ascii=False)
+    sma_json = json.dumps(sma_line, ensure_ascii=False)
 
     total_h = int(height_top) + int(height_bottom)
 
@@ -156,6 +173,17 @@ def render_lightweight_chart_dual(
       const markers = __MARKERS__;
       if (markers && markers.length) {
         candleSeries.setMarkers(markers);
+      }
+
+      const smaData = __SMA__;
+      if (smaData && smaData.length) {
+        const smaSeries = chartTop.addLineSeries({
+          color: '#2962FF',
+          lineWidth: 2,
+          lastValueVisible: true,
+          priceLineVisible: false,
+        });
+        smaSeries.setData(smaData);
       }
 
       // Bottom: colored histogram for regime
@@ -217,6 +245,7 @@ def render_lightweight_chart_dual(
         .replace("__BOT_H__", str(int(height_bottom)))
         .replace("__CANDLES__", data_json)
         .replace("__MARKERS__", markers_json)
+        .replace("__SMA__", sma_json)
         .replace("__HIST__", hist_json)
         .replace("__DIR__", dir_json)
     )

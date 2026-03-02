@@ -138,17 +138,16 @@ class _SuperTrend(StrategySpec):
 class _STDailyRSI2(StrategySpec):
     def default_param_grid(self):
         return {
-            "st_period": [10, 14, 20],
-            "st_multiplier": [2.5, 3.0, 3.5],
-            "rsi_period": [2, 3],
-            "entry_rsi": [10.0, 15.0, 20.0],
-            "exit_rsi": [45.0, 50.0, 55.0],
-            "stop_pct": [0.006, 0.008, 0.010],
-            "take_pct": [0.0],  # default: no take profit; allow trailing/flip/time to exit
-            "max_bars_hold": [12, 24, 36],
-            "disable_take_profit": [True],
-            "use_trailing_stop": [True],
-            "trail_pct": [0.02, 0.025, 0.03],
+            "st_period": [20],
+            "st_multiplier": [3.0],
+            "rsi_period": [2],
+            "entry_rsi": [15.0],
+            "stop_pct": [0.006],
+            "take_pct": [0.0],
+            "max_bars_hold": [72],
+            "enable_ma_profit_trail": [1],
+            "ma_period": [5],
+            "trail_pct": [0.005],
         }
 
 
